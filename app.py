@@ -9,7 +9,16 @@ st.sidebar.header("Signal Settings")
 
 signal_type = st.sidebar.selectbox(
     "Signal Type",
-    ["Sine", "Square", "Chirp"]
+    [
+        "Sine",
+        "Square",
+        "Triangle",
+        "Sawtooth",
+        "Chirp",
+        "White Noise",
+        "Impulse",
+        "Step"
+    ]
 )
 
 freq = st.sidebar.slider("Frequency (Hz)", 1, 1000, 50)
@@ -30,7 +39,7 @@ module = st.sidebar.selectbox(
     ]
 )
 
-# ---------------- SIGNAL GENERATOR ----------------
+# Signal Generator
 if module == "Signal Generator":
 
     st.subheader("📈 Generated Signal")
@@ -43,7 +52,7 @@ if module == "Signal Generator":
 
     st.pyplot(fig)
 
-# ---------------- FFT ----------------
+# FFT Spectrum
 elif module == "FFT Spectrum":
 
     st.subheader("📊 FFT Spectrum")
@@ -52,14 +61,13 @@ elif module == "FFT Spectrum":
 
     fig, ax = plt.subplots()
     ax.plot(freqs, magnitude)
-
     ax.set_xlabel("Frequency (Hz)")
     ax.set_ylabel("Magnitude")
     ax.set_title("FFT Spectrum")
 
     st.pyplot(fig)
 
-# ---------------- FILTER ----------------
+# Digital Filter
 elif module == "Digital Filter":
 
     st.subheader("🎚 Low Pass Filter")
@@ -69,30 +77,27 @@ elif module == "Digital Filter":
     filtered = apply_lowpass_filter(signal, cutoff, fs)
 
     fig, ax = plt.subplots()
-    ax.plot(t, signal, label="Original Signal")
-    ax.plot(t, filtered, label="Filtered Signal")
-
+    ax.plot(t, signal, label="Original")
+    ax.plot(t, filtered, label="Filtered")
     ax.legend()
-    ax.set_title("Low Pass Filter Output")
+    ax.set_title("Filter Output")
 
     st.pyplot(fig)
 
-# ---------------- SPECTROGRAM ----------------
+# Spectrogram
 elif module == "Spectrogram":
 
     st.subheader("🌈 Spectrogram")
 
     fig, ax = plt.subplots()
-
     ax.specgram(signal, Fs=fs)
-
     ax.set_xlabel("Time")
     ax.set_ylabel("Frequency")
     ax.set_title("Signal Spectrogram")
 
     st.pyplot(fig)
 
-# ---------------- CONVOLUTION ----------------
+# Convolution
 elif module == "Convolution":
 
     st.subheader("🔁 Convolution")
@@ -100,30 +105,26 @@ elif module == "Convolution":
     y = apply_convolution(signal)
 
     fig, ax = plt.subplots()
-
     ax.plot(t, signal, label="Input Signal")
     ax.plot(t, y, label="Convolved Signal")
-
     ax.legend()
 
     st.pyplot(fig)
 
-# ---------------- WINDOW ----------------
+# Window Functions
 elif module == "Window Functions":
 
     st.subheader("🪟 Window Functions")
 
     window_type = st.selectbox(
-        "Select Window",
+        "Window Type",
         ["hann", "hamming", "blackman"]
     )
 
     window = apply_window(window_type, len(signal))
 
     fig, ax = plt.subplots()
-
     ax.plot(window)
-
     ax.set_title(window_type + " Window")
 
     st.pyplot(fig)
