@@ -1,142 +1,84 @@
 import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.signal import butter, cheby1, lfilter, firwin
-import soundfile as sf
+from scipy.signal import butter, lfilter
 
-st.set_page_config(page_title="DSP Visualizer", layout="wide")
+st.title("Communication Signal Noise Reduction using DSP")
 
-st.title("Interactive DSP Algorithm Visualizer")
+st.sidebar.header("Signal Parameters")
 
-st.sidebar.header("Signal Controls")
+# Parameters
+fs = st.sidebar.slider("Sampling Frequency (Hz)", 500, 5000, 1000)
+f = st.sidebar.slider("Signal Frequency (Hz)", 1, 200, 50)
+duration = st.sidebar.slider("Signal Duration (seconds)", 1, 5, 2)
+noise_level = st.sidebar.slider("Noise Level", 0.0, 2.0, 0.5)
 
-signal_type = st.sidebar.selectbox(
-    "Signal Source",
-    ["Sine", "Cosine", "Square", "Noise", "Speech-like", "ECG", "Upload Audio"]
-)
+st.sidebar.header("Filter Parameters")
 
-fs = st.sidebar.slider("Sampling Frequency", 200, 5000, 1000)
-freq = st.sidebar.slider("Signal Frequency", 1, 500, 10)
-duration = st.sidebar.slider("Duration", 1, 5, 2)
-
-algorithm = st.sidebar.selectbox(
-    "Algorithm",
-    ["FFT", "DFT", "DIT FFT", "DIF FFT"]
-)
-
-filter_family = st.sidebar.selectbox(
-    "Filter Family",
-    ["None", "FIR", "Butterworth", "Chebyshev"]
-)
-
-filter_type = st.sidebar.selectbox(
-    "Filter Type",
-    ["Low Pass", "High Pass", "Band Pass", "Band Reject"]
-)
-
-cutoff = st.sidebar.slider("Cutoff Frequency", 1, 500, 50)
+cutoff = st.sidebar.slider("Cutoff Frequency", 1, 200, 100)
 order = st.sidebar.slider("Filter Order", 1, 10, 4)
 
 # Time axis
 t = np.linspace(0, duration, fs*duration)
 
-# Signal generation
-if signal_type == "Sine":
-    signal = np.sin(2*np.pi*freq*t)
+# Original Signal
+signal = np.sin(2*np.pi*f*t)
 
-elif signal_type == "Cosine":
-    signal = np.cos(2*np.pi*freq*t)
+# Add Noise
+noise = noise_level * np.random.randn(len(t))
+noisy_signal = signal + noise
 
-elif signal_type == "Square":
-    signal = np.sign(np.sin(2*np.pi*freq*t))
+# Butterworth Filter
+b, a = butter(order, cutoff, fs=fs)
+filtered_signal = lfilter(b, a, noisy_signal)
 
-elif signal_type == "Noise":
-    signal = np.random.randn(len(t))
+# FFT
+def compute_fft(sig):
+    spectrum = np.fft.fft(sig)
+    freq_axis = np.fft.fftfreq(len(sig), 1/fs)
+    return freq_axis, np.abs(spectrum)
 
-elif signal_type == "Speech-like":
-    signal = np.sin(2*np.pi*freq*t) + 0.5*np.sin(2*np.pi*2*freq*t)
+freq1, spec1 = compute_fft(signal)
+freq2, spec2 = compute_fft(noisy_signal)
+freq3, spec3 = compute_fft(filtered_signal)
 
-elif signal_type == "ECG":
-    signal = np.sin(2*np.pi*1.7*t) + 0.5*np.sin(2*np.pi*2.1*t)
+# Plot signals
+st.subheader("Time Domain Comparison")
 
-elif signal_type == "Upload Audio":
+fig, ax = plt.subplots(3,1, figsize=(8,8))
 
-    uploaded = st.file_uploader("Upload WAV file", type=["wav"])
+ax[0].plot(t, signal)
+ax[0].set_title("Original Signal")
 
-    if uploaded is not None:
-        signal, fs = sf.read(uploaded)
-        t = np.arange(len(signal)) / fs
-    else:
-        st.stop()
+ax[1].plot(t, noisy_signal)
+ax[1].set_title("Noisy Signal (Communication Channel)")
 
-# Plot time-domain signal
-st.subheader("Time Domain Signal")
+ax[2].plot(t, filtered_signal)
+ax[2].set_title("Filtered Signal (After DSP)")
 
-fig1, ax1 = plt.subplots()
-ax1.plot(t, signal)
-ax1.set_xlabel("Time")
-ax1.set_ylabel("Amplitude")
-st.pyplot(fig1)
+st.pyplot(fig)
 
-filtered_signal = signal
+# Frequency spectrum
+st.subheader("Frequency Domain Comparison")
 
-# FIR filter
-if filter_family == "FIR":
+fig2, ax2 = plt.subplots(3,1, figsize=(8,8))
 
-    coeff = firwin(51, cutoff, fs=fs)
-    filtered_signal = lfilter(coeff, 1.0, signal)
+ax2[0].plot(freq1, spec1)
+ax2[0].set_title("Original Spectrum")
 
-# Butterworth filters
-elif filter_family == "Butterworth":
+ax2[1].plot(freq2, spec2)
+ax2[1].set_title("Noisy Spectrum")
 
-    if filter_type == "Low Pass":
-        b,a = butter(order, cutoff, fs=fs)
+ax2[2].plot(freq3, spec3)
+ax2[2].set_title("Filtered Spectrum")
 
-    elif filter_type == "High Pass":
-        b,a = butter(order, cutoff, btype='high', fs=fs)
-
-    elif filter_type == "Band Pass":
-        b,a = butter(order, [cutoff, cutoff*2], btype='bandpass', fs=fs)
-
-    elif filter_type == "Band Reject":
-        b,a = butter(order, [cutoff, cutoff*2], btype='bandstop', fs=fs)
-
-    filtered_signal = lfilter(b,a,signal)
-
-# Chebyshev filters
-elif filter_family == "Chebyshev":
-
-    if filter_type == "Low Pass":
-        b,a = cheby1(order,1,cutoff,fs=fs)
-
-    elif filter_type == "High Pass":
-        b,a = cheby1(order,1,cutoff,btype='high',fs=fs)
-
-    elif filter_type == "Band Pass":
-        b,a = cheby1(order,1,[cutoff,cutoff*2],btype='bandpass',fs=fs)
-
-    elif filter_type == "Band Reject":
-        b,a = cheby1(order,1,[cutoff,cutoff*2],btype='bandstop',fs=fs)
-
-    filtered_signal = lfilter(b,a,signal)
-
-# Plot filtered signal
-st.subheader("Filtered Signal")
-
-fig2, ax2 = plt.subplots()
-ax2.plot(t, filtered_signal)
-ax2.set_xlabel("Time")
-ax2.set_ylabel("Amplitude")
 st.pyplot(fig2)
 
-# Frequency domain
-st.subheader("Frequency Spectrum")
+# Comparison metrics
+snr_before = np.mean(signal**2) / np.mean(noise**2)
+snr_after = np.mean(signal**2) / np.mean((filtered_signal-signal)**2)
 
-spectrum = np.fft.fft(filtered_signal)
-freq_axis = np.fft.fftfreq(len(filtered_signal),1/fs)
+st.subheader("Performance Comparison")
 
-fig3, ax3 = plt.subplots()
-ax3.plot(freq_axis, np.abs(spectrum))
-ax3.set_xlabel("Frequency")
-ax3.set_ylabel("Magnitude")
-st.pyplot(fig3)
+st.write("SNR Before Filtering:", round(snr_before,2))
+st.write("SNR After Filtering:", round(snr_after,2))
