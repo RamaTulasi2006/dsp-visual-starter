@@ -3,82 +3,109 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import butter, lfilter
 
-st.title("Communication Signal Noise Reduction using DSP")
+# Page config
+st.set_page_config(page_title="ECG DSP Visualizer", layout="wide")
 
+# Title
+st.title("ECG Signal Noise Removal using Butterworth Filter")
+
+# -----------------------------
+# Sidebar Controls
+# -----------------------------
 st.sidebar.header("Signal Parameters")
 
-# Parameters
 fs = st.sidebar.slider("Sampling Frequency (Hz)", 500, 5000, 1000)
-f = st.sidebar.slider("Signal Frequency (Hz)", 1, 200, 50)
-duration = st.sidebar.slider("Signal Duration (seconds)", 1, 5, 2)
+duration = st.sidebar.slider("Duration (seconds)", 1, 5, 2)
 noise_level = st.sidebar.slider("Noise Level", 0.0, 2.0, 0.5)
 
 st.sidebar.header("Filter Parameters")
 
-cutoff = st.sidebar.slider("Cutoff Frequency", 1, 200, 100)
+cutoff = st.sidebar.slider("Cutoff Frequency (Hz)", 1, 100, 40)
 order = st.sidebar.slider("Filter Order", 1, 10, 4)
 
-# Time axis
-t = np.linspace(0, duration, fs*duration)
+# -----------------------------
+# Generate ECG Signal
+# -----------------------------
+t = np.linspace(0, duration, fs * duration)
 
-# Original Signal
-signal = np.sin(2*np.pi*f*t)
+# Simulated ECG waveform
+ecg = np.sin(2 * np.pi * 1.7 * t) + 0.5 * np.sin(2 * np.pi * 2.1 * t)
 
-# Add Noise
+# Add noise
 noise = noise_level * np.random.randn(len(t))
-noisy_signal = signal + noise
+noisy_ecg = ecg + noise
 
-# Butterworth Filter
+# -----------------------------
+# Apply Butterworth Filter
+# -----------------------------
 b, a = butter(order, cutoff, fs=fs)
-filtered_signal = lfilter(b, a, noisy_signal)
+filtered_ecg = lfilter(b, a, noisy_ecg)
 
-# FFT
-def compute_fft(sig):
-    spectrum = np.fft.fft(sig)
-    freq_axis = np.fft.fftfreq(len(sig), 1/fs)
-    return freq_axis, np.abs(spectrum)
+# -----------------------------
+# FFT Function
+# -----------------------------
+def compute_fft(signal):
+    fft_vals = np.fft.fft(signal)
+    freq = np.fft.fftfreq(len(signal), 1/fs)
+    return freq, np.abs(fft_vals)
 
-freq1, spec1 = compute_fft(signal)
-freq2, spec2 = compute_fft(noisy_signal)
-freq3, spec3 = compute_fft(filtered_signal)
+f1, s1 = compute_fft(ecg)
+f2, s2 = compute_fft(noisy_ecg)
+f3, s3 = compute_fft(filtered_ecg)
 
-# Plot signals
+# -----------------------------
+# Time Domain Plots
+# -----------------------------
 st.subheader("Time Domain Comparison")
 
-fig, ax = plt.subplots(3,1, figsize=(8,8))
+fig1, ax1 = plt.subplots(3, 1, figsize=(8, 8))
 
-ax[0].plot(t, signal)
-ax[0].set_title("Original Signal")
+ax1[0].plot(t, ecg)
+ax1[0].set_title("Original ECG Signal")
 
-ax[1].plot(t, noisy_signal)
-ax[1].set_title("Noisy Signal (Communication Channel)")
+ax1[1].plot(t, noisy_ecg)
+ax1[1].set_title("Noisy ECG Signal")
 
-ax[2].plot(t, filtered_signal)
-ax[2].set_title("Filtered Signal (After DSP)")
+ax1[2].plot(t, filtered_ecg)
+ax1[2].set_title("Filtered ECG Signal")
 
-st.pyplot(fig)
+plt.tight_layout()
+st.pyplot(fig1)
 
-# Frequency spectrum
+# -----------------------------
+# Frequency Domain Plots
+# -----------------------------
 st.subheader("Frequency Domain Comparison")
 
-fig2, ax2 = plt.subplots(3,1, figsize=(8,8))
+fig2, ax2 = plt.subplots(3, 1, figsize=(8, 8))
 
-ax2[0].plot(freq1, spec1)
+ax2[0].plot(f1, s1)
 ax2[0].set_title("Original Spectrum")
 
-ax2[1].plot(freq2, spec2)
+ax2[1].plot(f2, s2)
 ax2[1].set_title("Noisy Spectrum")
 
-ax2[2].plot(freq3, spec3)
+ax2[2].plot(f3, s3)
 ax2[2].set_title("Filtered Spectrum")
 
+plt.tight_layout()
 st.pyplot(fig2)
 
-# Comparison metrics
-snr_before = np.mean(signal**2) / np.mean(noise**2)
-snr_after = np.mean(signal**2) / np.mean((filtered_signal-signal)**2)
+# -----------------------------
+# SNR Calculation
+# -----------------------------
+snr_before = np.mean(ecg**2) / np.mean(noise**2)
+snr_after = np.mean(ecg**2) / np.mean((filtered_ecg - ecg)**2)
 
-st.subheader("Performance Comparison")
+# -----------------------------
+# Metrics Display
+# -----------------------------
+st.subheader("Performance Analysis")
 
-st.write("SNR Before Filtering:", round(snr_before,2))
-st.write("SNR After Filtering:", round(snr_after,2))
+col1, col2 = st.columns(2)
+
+with col1:
+    st.metric("SNR Before Filtering", f"{snr_before:.2f}")
+
+with col2:
+    st.metric("SNR After Filtering", f"{snr_after:.2f}")
