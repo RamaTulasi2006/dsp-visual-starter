@@ -1,21 +1,18 @@
 import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.signal import butter, lfilter
+from scipy.signal import butter, lfilter, find_peaks
+import pandas as pd
 
-# Page config
-st.set_page_config(page_title="ECG DSP Visualizer", layout="wide")
+st.set_page_config(page_title="ECG Health Analyzer", layout="wide")
 
-# Title
-st.title("ECG Signal Noise Removal using Butterworth Filter")
+st.title("ECG Health Analysis using DSP (Butterworth Filter)")
 
-# -----------------------------
 # Sidebar Controls
-# -----------------------------
 st.sidebar.header("Signal Parameters")
 
 fs = st.sidebar.slider("Sampling Frequency (Hz)", 500, 5000, 1000)
-duration = st.sidebar.slider("Duration (seconds)", 1, 5, 2)
+duration = st.sidebar.slider("Duration (seconds)", 2, 5, 3)
 noise_level = st.sidebar.slider("Noise Level", 0.0, 2.0, 0.5)
 
 st.sidebar.header("Filter Parameters")
@@ -23,89 +20,112 @@ st.sidebar.header("Filter Parameters")
 cutoff = st.sidebar.slider("Cutoff Frequency (Hz)", 1, 100, 40)
 order = st.sidebar.slider("Filter Order", 1, 10, 4)
 
-# -----------------------------
-# Generate ECG Signal
-# -----------------------------
+# Time axis
 t = np.linspace(0, duration, fs * duration)
 
-# Simulated ECG waveform
-ecg = np.sin(2 * np.pi * 1.7 * t) + 0.5 * np.sin(2 * np.pi * 2.1 * t)
+# -----------------------------
+# Healthy ECG Signal
+# -----------------------------
+healthy_ecg = np.sin(2*np.pi*1.2*t) + 0.3*np.sin(2*np.pi*2*t)
 
-# Add noise
+# -----------------------------
+# Unhealthy ECG Signal
+# -----------------------------
+unhealthy_ecg = np.sin(2*np.pi*0.8*t) + 0.8*np.sin(2*np.pi*3*t)
+
+# Add Noise
 noise = noise_level * np.random.randn(len(t))
-noisy_ecg = ecg + noise
 
-# -----------------------------
-# Apply Butterworth Filter
-# -----------------------------
+healthy_noisy = healthy_ecg + noise
+unhealthy_noisy = unhealthy_ecg + noise
+
+# Butterworth Filter
 b, a = butter(order, cutoff, fs=fs)
-filtered_ecg = lfilter(b, a, noisy_ecg)
 
-# -----------------------------
+healthy_filtered = lfilter(b, a, healthy_noisy)
+unhealthy_filtered = lfilter(b, a, unhealthy_noisy)
+
 # FFT Function
-# -----------------------------
 def compute_fft(signal):
     fft_vals = np.fft.fft(signal)
     freq = np.fft.fftfreq(len(signal), 1/fs)
     return freq, np.abs(fft_vals)
 
-f1, s1 = compute_fft(ecg)
-f2, s2 = compute_fft(noisy_ecg)
-f3, s3 = compute_fft(filtered_ecg)
+# SNR
+def compute_snr(original, noise, filtered):
+    before = np.mean(original**2) / np.mean(noise**2)
+    after = np.mean(original**2) / np.mean((filtered - original)**2)
+    return before, after
+
+h_snr_before, h_snr_after = compute_snr(healthy_ecg, noise, healthy_filtered)
+u_snr_before, u_snr_after = compute_snr(unhealthy_ecg, noise, unhealthy_filtered)
+
+# Heart Rate Calculation
+def get_heart_rate(signal):
+    peaks, _ = find_peaks(signal, distance=fs/2)
+    if len(peaks) > 1:
+        rr = np.diff(peaks)/fs
+        return 60/np.mean(rr)
+    return 0
+
+h_hr = get_heart_rate(healthy_filtered)
+u_hr = get_heart_rate(unhealthy_filtered)
+
+# Signal Quality
+def quality(snr):
+    if snr > 10:
+        return "Good"
+    elif snr > 5:
+        return "Moderate"
+    return "Poor"
 
 # -----------------------------
-# Time Domain Plots
+# Plot Signals
 # -----------------------------
-st.subheader("Time Domain Comparison")
+st.subheader("Healthy vs Unhealthy ECG (Time Domain)")
 
-fig1, ax1 = plt.subplots(3, 1, figsize=(8, 8))
+fig, ax = plt.subplots(2,1, figsize=(8,6))
 
-ax1[0].plot(t, ecg)
-ax1[0].set_title("Original ECG Signal")
+ax[0].plot(t, healthy_filtered)
+ax[0].set_title("Healthy ECG")
 
-ax1[1].plot(t, noisy_ecg)
-ax1[1].set_title("Noisy ECG Signal")
+ax[1].plot(t, unhealthy_filtered)
+ax[1].set_title("Unhealthy ECG")
 
-ax1[2].plot(t, filtered_ecg)
-ax1[2].set_title("Filtered ECG Signal")
-
-plt.tight_layout()
-st.pyplot(fig1)
+st.pyplot(fig)
 
 # -----------------------------
-# Frequency Domain Plots
+# Comparison Table
 # -----------------------------
-st.subheader("Frequency Domain Comparison")
+st.subheader("Comparison Table")
 
-fig2, ax2 = plt.subplots(3, 1, figsize=(8, 8))
+data = {
+    "Parameter": ["Heart Rate (BPM)", "SNR Before", "SNR After", "Signal Quality"],
+    "Healthy Person": [round(h_hr,2), round(h_snr_before,2), round(h_snr_after,2), quality(h_snr_after)],
+    "Unhealthy Person": [round(u_hr,2), round(u_snr_before,2), round(u_snr_after,2), quality(u_snr_after)]
+}
 
-ax2[0].plot(f1, s1)
-ax2[0].set_title("Original Spectrum")
-
-ax2[1].plot(f2, s2)
-ax2[1].set_title("Noisy Spectrum")
-
-ax2[2].plot(f3, s3)
-ax2[2].set_title("Filtered Spectrum")
-
-plt.tight_layout()
-st.pyplot(fig2)
+df = pd.DataFrame(data)
+st.table(df)
 
 # -----------------------------
-# SNR Calculation
+# Simple Report
 # -----------------------------
-snr_before = np.mean(ecg**2) / np.mean(noise**2)
-snr_after = np.mean(ecg**2) / np.mean((filtered_ecg - ecg)**2)
+st.subheader("Simple Health Report")
+
+if h_hr >= 60 and h_hr <= 100:
+    st.success("Healthy Person: Normal Heart Rate")
+else:
+    st.warning("Healthy Person: Abnormal Heart Rate")
+
+if u_hr < 60:
+    st.error("Unhealthy Person: Low Heart Rate (Bradycardia)")
+elif u_hr > 100:
+    st.error("Unhealthy Person: High Heart Rate (Tachycardia)")
+else:
+    st.warning("Unhealthy Person: Needs further diagnosis")
 
 # -----------------------------
-# Metrics Display
+# Final Message
 # -----------------------------
-st.subheader("Performance Analysis")
-
-col1, col2 = st.columns(2)
-
-with col1:
-    st.metric("SNR Before Filtering", f"{snr_before:.2f}")
-
-with col2:
-    st.metric("SNR After Filtering", f"{snr_after:.2f}")
+st.info("This system helps even non-technical users understand ECG signals using simple parameters like heart rate and signal quality.")
