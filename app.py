@@ -4,73 +4,49 @@ import matplotlib.pyplot as plt
 from scipy.signal import butter, lfilter, find_peaks
 import pandas as pd
 
-st.set_page_config(page_title="DSP ECG Visualizer", layout="wide")
+st.set_page_config(page_title="ECG Health Analyzer", layout="wide")
 
-st.title("Interactive DSP Algorithm Visualizer with Medical Analysis")
+st.title("Interactive DSP Visualizer with Medical Decision System")
 
 # -----------------------------
-# Sidebar Controls
+# Sidebar
 # -----------------------------
-st.sidebar.header("Signal Parameters")
-
-fs = st.sidebar.slider("Sampling Frequency (Hz)", 500, 5000, 1000)
-duration = st.sidebar.slider("Duration (seconds)", 2, 5, 3)
+fs = st.sidebar.slider("Sampling Frequency", 500, 5000, 1000)
+duration = st.sidebar.slider("Duration", 2, 5, 3)
 noise_level = st.sidebar.slider("Noise Level", 0.0, 2.0, 0.5)
 
-st.sidebar.header("Filter Parameters")
-
-cutoff = st.sidebar.slider("Cutoff Frequency (Hz)", 1, 100, 40)
+cutoff = st.sidebar.slider("Cutoff Frequency", 1, 100, 40)
 order = st.sidebar.slider("Filter Order", 1, 10, 4)
 
+# Ideal Parameters
+IDEAL_HR_LOW = 60
+IDEAL_HR_HIGH = 100
+IDEAL_SNR = 10
+
 # -----------------------------
-# Generate Signals
+# Signals
 # -----------------------------
 t = np.linspace(0, duration, fs * duration)
 
-# Original ECG (base)
-ecg = np.sin(2*np.pi*1.7*t) + 0.5*np.sin(2*np.pi*2.1*t)
+# Person 1 (Healthy)
+p1_ecg = np.sin(2*np.pi*1.2*t) + 0.3*np.sin(2*np.pi*2*t)
 
-# Healthy & Unhealthy
-healthy_ecg = np.sin(2*np.pi*1.2*t) + 0.3*np.sin(2*np.pi*2*t)
-unhealthy_ecg = np.sin(2*np.pi*0.8*t) + 0.8*np.sin(2*np.pi*3*t)
+# Person 2 (Unhealthy)
+p2_ecg = np.sin(2*np.pi*0.6*t) + 0.9*np.sin(2*np.pi*3*t)
 
-# Add Noise
+# Noise
 noise = noise_level * np.random.randn(len(t))
-noisy_ecg = ecg + noise
-healthy_noisy = healthy_ecg + noise
-unhealthy_noisy = unhealthy_ecg + noise
 
-# -----------------------------
-# Butterworth Filter
-# -----------------------------
+p1_noisy = p1_ecg + noise
+p2_noisy = p2_ecg + noise
+
+# Filter
 b, a = butter(order, cutoff, fs=fs)
-
-filtered_ecg = lfilter(b, a, noisy_ecg)
-healthy_filtered = lfilter(b, a, healthy_noisy)
-unhealthy_filtered = lfilter(b, a, unhealthy_noisy)
+p1_filtered = lfilter(b, a, p1_noisy)
+p2_filtered = lfilter(b, a, p2_noisy)
 
 # -----------------------------
-# FFT Function
-# -----------------------------
-def compute_fft(signal):
-    fft_vals = np.fft.fft(signal)
-    freq = np.fft.fftfreq(len(signal), 1/fs)
-    return freq, np.abs(fft_vals)
-
-# -----------------------------
-# SNR Calculation
-# -----------------------------
-def compute_snr(original, noise, filtered):
-    before = np.mean(original**2) / np.mean(noise**2)
-    after = np.mean(original**2) / np.mean((filtered - original)**2)
-    return before, after
-
-snr_before, snr_after = compute_snr(ecg, noise, filtered_ecg)
-h_snr_before, h_snr_after = compute_snr(healthy_ecg, noise, healthy_filtered)
-u_snr_before, u_snr_after = compute_snr(unhealthy_ecg, noise, unhealthy_filtered)
-
-# -----------------------------
-# Heart Rate Calculation
+# Functions
 # -----------------------------
 def get_hr(signal):
     peaks, _ = find_peaks(signal, distance=fs/2)
@@ -79,110 +55,75 @@ def get_hr(signal):
         return 60/np.mean(rr)
     return 0
 
-h_hr = get_hr(healthy_filtered)
-u_hr = get_hr(unhealthy_filtered)
+def compute_snr(original, noise, filtered):
+    return np.mean(original**2) / np.mean((filtered-original)**2)
+
+def health_status(hr, snr):
+    if hr < IDEAL_HR_LOW or hr > IDEAL_HR_HIGH:
+        return "❌ Risk (Abnormal Heart Rate)"
+    elif snr < IDEAL_SNR:
+        return "⚠️ Moderate (Low Signal Quality)"
+    else:
+        return "✅ Healthy"
 
 # -----------------------------
-# Signal Quality
+# Parameters
 # -----------------------------
-def quality(snr):
-    if snr > 10:
-        return "Good"
-    elif snr > 5:
-        return "Moderate"
-    return "Poor"
+p1_hr = get_hr(p1_filtered)
+p2_hr = get_hr(p2_filtered)
 
-# -----------------------------
-# OLD VISUALIZATION (UNCHANGED)
-# -----------------------------
-st.subheader("Original DSP Visualization")
+p1_snr = compute_snr(p1_ecg, noise, p1_filtered)
+p2_snr = compute_snr(p2_ecg, noise, p2_filtered)
 
-fig1, ax1 = plt.subplots(3,1, figsize=(8,8))
-
-ax1[0].plot(t, ecg)
-ax1[0].set_title("Original Signal")
-
-ax1[1].plot(t, noisy_ecg)
-ax1[1].set_title("Noisy Signal")
-
-ax1[2].plot(t, filtered_ecg)
-ax1[2].set_title("Filtered Signal")
-
-st.pyplot(fig1)
-
-# Frequency
-f1, s1 = compute_fft(ecg)
-f2, s2 = compute_fft(noisy_ecg)
-f3, s3 = compute_fft(filtered_ecg)
-
-st.subheader("Frequency Domain")
-
-fig2, ax2 = plt.subplots(3,1, figsize=(8,8))
-
-ax2[0].plot(f1, s1)
-ax2[0].set_title("Original Spectrum")
-
-ax2[1].plot(f2, s2)
-ax2[1].set_title("Noisy Spectrum")
-
-ax2[2].plot(f3, s3)
-ax2[2].set_title("Filtered Spectrum")
-
-st.pyplot(fig2)
+p1_status = health_status(p1_hr, p1_snr)
+p2_status = health_status(p2_hr, p2_snr)
 
 # -----------------------------
-# PERFORMANCE METRICS
+# Visualization
 # -----------------------------
-st.subheader("Performance")
+st.subheader("ECG Signals")
 
-col1, col2 = st.columns(2)
+fig, ax = plt.subplots(2,1, figsize=(8,6))
 
-with col1:
-    st.metric("SNR Before", f"{snr_before:.2f}")
+ax[0].plot(t, p1_filtered)
+ax[0].set_title("Person 1 ECG")
 
-with col2:
-    st.metric("SNR After", f"{snr_after:.2f}")
+ax[1].plot(t, p2_filtered)
+ax[1].set_title("Person 2 ECG")
+
+st.pyplot(fig)
 
 # -----------------------------
-# NEW MEDICAL ANALYSIS
+# Comparison Table
 # -----------------------------
-st.subheader("Medical Comparison")
+st.subheader("Medical Comparison Table")
 
-fig3, ax3 = plt.subplots(2,1, figsize=(8,6))
-
-ax3[0].plot(t, healthy_filtered)
-ax3[0].set_title("Healthy ECG")
-
-ax3[1].plot(t, unhealthy_filtered)
-ax3[1].set_title("Unhealthy ECG")
-
-st.pyplot(fig3)
-
-# Table
 data = {
-    "Parameter": ["Heart Rate (BPM)", "SNR After", "Signal Quality"],
-    "Healthy": [round(h_hr,2), round(h_snr_after,2), quality(h_snr_after)],
-    "Unhealthy": [round(u_hr,2), round(u_snr_after,2), quality(u_snr_after)]
+    "Parameter": ["Heart Rate (BPM)", "SNR", "Status"],
+    "Person 1": [round(p1_hr,2), round(p1_snr,2), p1_status],
+    "Person 2": [round(p2_hr,2), round(p2_snr,2), p2_status],
+    "Ideal Range": ["60-100 BPM", ">10", "Healthy"]
 }
 
 df = pd.DataFrame(data)
 st.table(df)
 
 # -----------------------------
-# REPORT
+# Final Report
 # -----------------------------
-st.subheader("Simple Health Report")
+st.subheader("Final Health Report")
 
-if 60 <= h_hr <= 100:
-    st.success("Healthy Person: Normal Heart Rate")
-else:
-    st.warning("Healthy Person: Abnormal")
+st.write("### Person 1:")
+st.write(f"Heart Rate: {p1_hr:.2f} BPM")
+st.write(f"Signal Quality (SNR): {p1_snr:.2f}")
+st.write(f"Condition: {p1_status}")
 
-if u_hr < 60:
-    st.error("Unhealthy Person: Low Heart Rate")
-elif u_hr > 100:
-    st.error("Unhealthy Person: High Heart Rate")
-else:
-    st.warning("Unhealthy Person: Needs Check")
+st.write("### Person 2:")
+st.write(f"Heart Rate: {p2_hr:.2f} BPM")
+st.write(f"Signal Quality (SNR): {p2_snr:.2f}")
+st.write(f"Condition: {p2_status}")
 
-st.info("This system converts complex ECG signals into simple medical understanding for all users.")
+# -----------------------------
+# Easy Explanation
+# -----------------------------
+st.info("This system compares ECG signals with ideal medical values and gives a simple health report understandable by anyone.")
